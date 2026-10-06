@@ -21,7 +21,7 @@
 		echo "	GitHub: https://github.com/tmcphee/cyberghostvpn"
 		echo "	DockerHub: https://hub.docker.com/r/tmcphee/cyberghostvpn"
 		echo "	"
-		echo "	Ubuntu:${linux_version} | CyberGhost:${cyberghost_version} | ${script_version}"
+		echo "	Debian:${linux_version} | CyberGhost:${cyberghost_version} | ${script_version}"
 		echo "----------------------------------------------------------"
 		
 		echo "**************User Defined Variables**************"
@@ -64,10 +64,10 @@
 		value=${str#* }
 		
 		echo "***********CyberGhost Connection Info***********"
-		echo "	IP: ""$(curl -s https://ipinfo.io/ip -H "Cache-Control: no-cache, no-store, must-revalidate")"
-		echo "	CITY: ""$(curl -s https://ipinfo.io/city -H "Cache-Control: no-cache, no-store, must-revalidate")"
-		echo "	REGION: ""$(curl -s https://ipinfo.io/region -H "Cache-Control: no-cache, no-store, must-revalidate")"
-		echo "	COUNTRY: ""$(curl -s https://ipinfo.io/country -H "Cache-Control: no-cache, no-store, must-revalidate")"
+		echo "	IP: ""$(curl -s -m 10 https://ipinfo.io/ip -H "Cache-Control: no-cache, no-store, must-revalidate")"
+		echo "	CITY: ""$(curl -s -m 10 https://ipinfo.io/city -H "Cache-Control: no-cache, no-store, must-revalidate")"
+		echo "	REGION: ""$(curl -s -m 10 https://ipinfo.io/region -H "Cache-Control: no-cache, no-store, must-revalidate")"
+		echo "	COUNTRY: ""$(curl -s -m 10 https://ipinfo.io/country -H "Cache-Control: no-cache, no-store, must-revalidate")"
 		echo "	DNS: ${value}"
 		echo "************************************************"
 	}
@@ -106,23 +106,9 @@
 			if [ -n "$NAMESERVER" ]; then
 				echo 'nameserver ' "$NAMESERVER" > /etc/resolv.conf
 			else
-				# SMART DNS
-				# This will switch baised on country selected
-				# https://support.cyberghostvpn.com/hc/en-us/articles/360012002360
-				case "$COUNTRY" in
-					"NL") echo 'nameserver 75.2.43.210' > /etc/resolv.conf
-					;;
-					"GB") echo 'nameserver 75.2.79.213' > /etc/resolv.conf
-					;;
-					"JP") echo 'nameserver 76.223.64.81' > /etc/resolv.conf
-					;;
-					"DE") echo 'nameserver 13.248.182.241' > /etc/resolv.conf
-					;;
-					"US") echo 'nameserver 99.83.181.72' > /etc/resolv.conf
-					;;
-					*) echo 'nameserver 1.1.1.1' > /etc/resolv.conf
-					;;
-			esac
+				# CyberGhost Smart DNS only serves IPs registered on the account and answers 0.0.0.1
+				# for every domain when queried over the VPN. Use CloudFlare through the tunnel instead
+				echo 'nameserver 1.1.1.1' > /etc/resolv.conf
 			fi
 		fi
 		disable_dns_port
@@ -138,12 +124,14 @@
 		ip_stats
 	}
 	
-	#Check if the site is reachable
+	#Check if the internet is reachable. Ping CloudFlare then Google so one filtered target doesn't trigger a reconnect
 	check_up() {
-		ping -c1 "1.1.1.1" > /dev/null 2>&1 #Ping CloudFlare
-		if [ $? -eq 0 ]; then
-			return 0
-		fi
+		for host in 1.1.1.1 8.8.8.8
+		do
+			if ping -c1 -W5 "$host" > /dev/null 2>&1; then
+				return 0
+			fi
+		done
 		return 1
 	}
 	if ! [ -n "$FIREWALL" ]; then
@@ -176,7 +164,6 @@
 			echo "Initiating Firewall First Time Setup..."
 				
 			sudo ufw disable #Stop Firewall
-			export CYBERGHOST_API_IP=$(getent ahostsv4 v2-api.cyberghostvpn.com | grep STREAM | head -n 1 | cut -d ' ' -f 1)
 			sudo ufw default deny outgoing > /dev/null 2>&1							#Deny All traffic by default on all interfaces
 			sudo ufw default deny incoming > /dev/null 2>&1
 			sudo ufw allow out on cyberghost from any to any > /dev/null 2>&1 		#Allow All over cyberghost interface
@@ -185,8 +172,12 @@
 			sudo ufw allow out 1337 > /dev/null 2>&1
 			sudo ufw allow in 891 > /dev/null 2>&1 									#Allow port 1194 for CyberGhost OpenVPN Communication
 			sudo ufw allow out 819 > /dev/null 2>&1
-			sudo ufw allow out from any to "$CYBERGHOST_API_IP" > /dev/null 2>&1 	#Allow v2-api.cyberghostvpn.com [104.20.0.14] IP for connection
-			sudo ufw allow in from "$CYBERGHOST_API_IP" to any > /dev/null 2>&1
+			#Allow every IP v2-api.cyberghostvpn.com resolves to. It is behind Cloudflare and the CLI may pick any of them
+			for CYBERGHOST_API_IP in $(getent ahostsv4 v2-api.cyberghostvpn.com | awk '/STREAM/{print $1}')
+			do
+				sudo ufw allow out from any to "$CYBERGHOST_API_IP" > /dev/null 2>&1
+				sudo ufw allow in from "$CYBERGHOST_API_IP" to any > /dev/null 2>&1
+			done
 			
 			#Allow all ports in WHITELISTPORTS ENV [Seperate by ',']
 			if [ -n "${WHITELISTPORTS}" ]; then
@@ -223,7 +214,7 @@
 	else
 		#Verify the config.ini has successfully created the Account and assigned a Device
 		echo "Verifying Login Auth..."
-		if ! grep -q '[Device]' $config_ini; then
+		if ! grep -qiF '[device]' $config_ini; then
 			echo "Failed"
 			rm "$config_ini"
 			echo "Logging into CyberGhost..."
@@ -261,24 +252,29 @@
 	
 	#WIREGUARD START AND WATCH
 	cyberghost_start
-	t_hr="$(date -u --date="+30 minutes" +%H)" #Next time to check internet is reachable
-	t_min="$(date -u --date="+30 minutes" +%M)"
+	fail_count=0 #Failed internet checks in a row
 	while true #Watch if Connection is lost then reconnect
 	do
 		sleep 30
 		if [[ $(sudo cyberghostvpn --status | grep 'No VPN connections found.' | wc -l) = "1" ]]; then
 			echo '[E2] VPN Connection Lost - Attempting to reconnect....'
-			cyberghost_start	
+			cyberghost_start
+			fail_count=0
+			continue
 		fi
-		
-		#Every 30 Minutes ping CloudFlare to check internet reachability 
-		if [ "$(date +%H)" = "$t_hr" ] && [ "$(date +%M)" = "$t_min" ]; then
-			if ! check_up; then
+
+		#WireGuard keeps the interface up when the server stops answering, so E2 never sees a dead tunnel.
+		#Check internet reachability on every pass and reconnect after 3 failures in a row [~2 minutes]
+		if check_up; then
+			fail_count=0
+		else
+			fail_count=$((fail_count + 1))
+			echo "Internet check failed ($fail_count/3)"
+			if [ "$fail_count" -ge 3 ]; then
 				echo '[E3] Internet not reachable - Restarting VPN...'
 				sudo cyberghostvpn --stop
 				cyberghost_start
-				t_hr="$(date -u --date="+30 minutes" +%H)" #Next time to check internet is reachable
-				t_min="$(date -u --date="+30 minutes" +%M)"
+				fail_count=0
 			fi
 		fi
 	done

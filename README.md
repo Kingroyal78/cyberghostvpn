@@ -8,7 +8,7 @@
 This is a WireGuard client docker that uses the CyberGhost CLI. It allows routing containers traffic through WireGuard.
 
 [Docker Image](https://hub.docker.com/r/tmcphee/cyberghostvpn)
-###### Ubuntu 20.04 | CyberGhost 1.3.4
+###### Debian 13 | CyberGhost 1.3.4
 
 ###### OpenVPN only image available [here](https://hub.docker.com/r/tmcphee/cyberghost-openvpn) running CyberGhost 1.4.1 
 
@@ -58,7 +58,7 @@ Examples:
 - Cloudflare 1.1.1.1
 - Google 8.8.8.8
 
-This image will use CyberGhost Smart DNS if no Nameserver is provided. Automatic Smart DNS for countries US, NL, JP and GB. Default is CloudFlare [1.1.1.1] for all other countries.
+Default is CloudFlare [1.1.1.1], queried through the VPN tunnel. CyberGhost Smart DNS is no longer used: it only serves IPs registered on the account and answers 0.0.0.1 for every domain when queried over the VPN.
 
 ## How to login
 Login by providing the ACC and PASS environment variables
