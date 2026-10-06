@@ -3,12 +3,15 @@
 </p>
 
 # CyberGhost VPN
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tmcphee/cyberghostvpn/docker-image.yml?style=for-the-badge) ![GitHub release (latest by date)](https://img.shields.io/github/v/release/tmcphee/cyberghostvpn?style=for-the-badge)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/Kingroyal78/cyberghostvpn/docker-image.yml?style=for-the-badge) ![GitHub tag (latest by date)](https://img.shields.io/github/v/tag/Kingroyal78/cyberghostvpn?style=for-the-badge)
 
 This is a WireGuard client docker that uses the CyberGhost CLI. It allows routing containers traffic through WireGuard.
 
-[Docker Image](https://hub.docker.com/r/tmcphee/cyberghostvpn)
-###### Debian 13 | CyberGhost 1.3.4
+[Docker Image](https://github.com/Kingroyal78/cyberghostvpn/pkgs/container/cyberghostvpn)
+```
+docker pull ghcr.io/kingroyal78/cyberghostvpn:latest
+```
+###### Debian 13 | CyberGhost 1.3.4 | x86_64 only
 
 ###### OpenVPN only image available [here](https://hub.docker.com/r/tmcphee/cyberghost-openvpn) running CyberGhost 1.4.1 
 
@@ -19,21 +22,22 @@ WireGuard® is an extremely simple yet fast and modern VPN that utilizes state-o
 ## How to use this image
 Start the image using optional environment variables shown below. The end-user must supply a volume for local storage of the CyberGhost auth and token files. Supplied DNS is optional to avoid using ISP DNS during the initial connection. Ensure to run the image in privileged mode.
 ```
-docker run 
-   -d 
-   --name='cyberghostvpn'
-   --net='bridge'
-   --privileged=true
-   --cap-add=NET_ADMIN 
-   -e TZ="America/New_York"
-   -e 'ACC'='example@gmail.com'
-   -e 'PASS'='mypassword'
-   -e 'COUNTRY'='US'
-   -e 'NETWORK'='192.168.1.0/24'
-   -e 'WHITELISTPORTS'='9090,8080'
-   -p 9090:9090
-   -p 8080:8080
-   -v '/local/path/to/config':'/home/root/.cyberghost:rw'
+docker run \
+   -d \
+   --name='cyberghostvpn' \
+   --net='bridge' \
+   --privileged=true \
+   --cap-add=NET_ADMIN \
+   -e TZ="America/New_York" \
+   -e 'ACC'='example@gmail.com' \
+   -e 'PASS'='mypassword' \
+   -e 'COUNTRY'='US' \
+   -e 'NETWORK'='192.168.1.0/24' \
+   -e 'WHITELISTPORTS'='9090,8080' \
+   -p 9090:9090 \
+   -p 8080:8080 \
+   -v '/local/path/to/config':'/home/root/.cyberghost:rw' \
+   ghcr.io/kingroyal78/cyberghostvpn:latest
 ```
 
 Other containers can connect to this image by using its network connection.
@@ -41,7 +45,7 @@ Other containers can connect to this image by using its network connection.
 ```
 docker run -d --net=container:cyberghostvpn other-container
 ```
-Note: If the other containers have exposed ports for example a WEBUI. Forward that port in the cyberghostvpn image, add the port to WHITELISTPORTS environment variable, and set your local LAN using NETWORK environment variable. See [Environment variables](https://github.com/tmcphee/cyberghostvpn#environment-variables) below for details. 
+Note: If the other containers have exposed ports for example a WEBUI. Forward that port in the cyberghostvpn image, add the port to WHITELISTPORTS environment variable, and set your local LAN using NETWORK environment variable. See [Environment variables](#environment-variables) below for details. 
 
 ## Selecting a country
 
