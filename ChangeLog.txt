@@ -1,4 +1,11 @@
 
+#1.3.0
+	- Base image switched to Debian 13 slim [Ubuntu 20.04 is end of life]. Image size ~950MB -> ~330MB
+	- Fix login hanging: firewall allows every IP of the CyberGhost API, not only the first
+	- Fix DNS: CyberGhost Smart DNS answers 0.0.0.1 over the VPN. Default to CloudFlare 1.1.1.1
+	- Fix dead tunnel not detected: internet check every 30 seconds, reconnect after 3 failures
+	- Fix login auth check accepting an incomplete config.ini
+	- Workflow builds on version tags and publishes to GHCR
 #1.2.2
 	- Add HTTP Proxy Service
 	- Proxy Toggle ENV variable
