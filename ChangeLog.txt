@@ -1,4 +1,9 @@
 
+#1.3.1
+	- Fix HTTP proxy not stopping on reconnect in containers running for hours. Squid is
+	  started and stopped directly instead of through the systemctl replacement
+	- Log "[E4]" when the HTTP proxy fails to start
+	- Squid shuts down in 1 second on reconnect instead of waiting 30 seconds for clients
 #1.3.0
 	- Base image switched to Debian 13 slim [Ubuntu 20.04 is end of life]. Image size ~950MB -> ~330MB
 	- Fix login hanging: firewall allows every IP of the CyberGhost API, not only the first

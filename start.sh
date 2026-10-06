@@ -72,15 +72,42 @@
 		echo "************************************************"
 	}
 	
+	#Squid is managed directly. The systemctl replacement loses track of it after a few hours
+	#[it treats /run/squid.pid as stale once /proc/1/status gets a newer mtime] and stop does nothing
+	proxy_stop () {
+		echo "Stopping HTTP Proxy..."
+		sudo pkill -x squid > /dev/null 2>&1
+		for i in $(seq 1 10) #Wait for squid to exit and release port 3128
+		do
+			pgrep -x squid > /dev/null || break
+			sleep 1
+		done
+		sudo pkill -9 -x squid > /dev/null 2>&1
+		rm -f /run/squid.pid
+		echo "HTTP Proxy stopped"
+	}
+
+	proxy_start () {
+		echo "Starting HTTP Proxy..."
+		sudo squid -YC > /dev/null 2>&1
+		for i in $(seq 1 10) #Wait for squid to listen on port 3128
+		do
+			if ss -ltn 'sport = :3128' | grep -q 3128; then
+				echo "HTTP Proxy running on port 3128"
+				return 0
+			fi
+			sleep 1
+		done
+		echo "[E4] HTTP Proxy failed to start. See /var/log/squid/cache.log"
+		return 1
+	}
+
 	#Originated from Run.sh. Migrated for speed improvements
 	cyberghost_start () {
 		#Stop Proxy service to prevent dns leaks
 		if [ -n "${PROXY}" ]; then
 			if [ "${PROXY}" == "True" ]; then
-				echo Stopping HTTP Proxy...
-				sudo systemctl disable squid
-				sudo systemctl stop squid
-				sudo systemctl status squid
+				proxy_stop
 			fi
 		fi
 		enable_dns_port
@@ -115,10 +142,7 @@
 		#Enable Proxy service
 		if [ -n "${PROXY}" ]; then
 			if [ "${PROXY}" == "True" ]; then
-				echo Starting HTTP Proxy...
-				sudo systemctl enable squid
-				sudo systemctl start squid
-				sudo systemctl status squid
+				proxy_start
 			fi
 		fi
 		ip_stats
@@ -286,4 +310,5 @@
 #E1 Can't Login to CyberGhost - Credentials not provided
 #E2 VPN Connection Lost
 #E3 Internet Connection Lost
+#E4 HTTP Proxy failed to start
 	

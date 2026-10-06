@@ -37,7 +37,8 @@ ENV cyberghost_version=${CYBERGHOST_VERSION} \
 ARG DEBIAN_FRONTEND=noninteractive
 
 #Everything the CyberGhost installer would fetch [openvpn, wireguard, resolvconf] plus what start.sh needs.
-#openresolv is required: wg-quick pipes the "DNS =" line of the CyberGhost config into resolvconf
+#openresolv is required: wg-quick pipes the "DNS =" line of the CyberGhost config into resolvconf.
+#systemd-standalone-sysusers satisfies squid's cron dependency so full systemd isn't pulled in
 RUN apt-get update && \
 	apt-get install -y --no-install-recommends \
 		ca-certificates \
@@ -51,7 +52,7 @@ RUN apt-get update && \
 		procps \
 		squid \
 		sudo \
-		systemctl \
+		systemd-standalone-sysusers \
 		tzdata \
 		ufw \
 		wireguard-tools && \
@@ -61,16 +62,15 @@ RUN apt-get update && \
 RUN update-alternatives --set iptables /usr/sbin/iptables-legacy && \
 	update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
-#The systemctl replacement predates Python 3.12 and prints SyntaxWarnings on every call. Silence them
-RUN sed -i '1s|^#! */usr/bin/python3$|#! /usr/bin/python3 -Wignore::SyntaxWarning|' /usr/bin/systemctl
-
 #Install CyberGhost CLI. Same result as the bundled install.sh, without its dead WireGuard PPA and apt-key steps
 COPY --from=cyberghost /opt/cyberghost /usr/local/cyberghost
 RUN ln -sf /usr/local/cyberghost/cyberghostvpn /usr/bin/cyberghostvpn
 
-#Setup HTTP Proxy. Allow all connections
+#Setup HTTP Proxy. Allow all connections.
+#start.sh stops squid on every reconnect, so don't wait the default 30 seconds for clients
 RUN sed -i 's/http_access allow localhost/http_access allow all/g' /etc/squid/squid.conf && \
-	sed -i 's/http_access deny all/#http_access deny all/g' /etc/squid/squid.conf
+	sed -i 's/http_access deny all/#http_access deny all/g' /etc/squid/squid.conf && \
+	echo 'shutdown_lifetime 1 seconds' > /etc/squid/conf.d/shutdown.conf
 
 #Disable IPV6 on ufw
 RUN sed -i 's/IPV6=yes/IPV6=no/g' /etc/default/ufw
